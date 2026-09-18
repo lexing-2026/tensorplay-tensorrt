@@ -18,8 +18,6 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from tensorplay.compiler import BackendCapabilities, declares_capabilities
-
 from .runtime import build_engine
 from .runtime.runner import Runner
 from .settings import CompilationSettings
@@ -29,14 +27,7 @@ __all__ = ["backend"]
 log = logging.getLogger(__name__)
 
 
-@declares_capabilities(
-    BackendCapabilities(
-        inference_only=True,
-        handles_training=False,
-        optional_deps=("tensorrt",),
-    )
-)
-def backend(
+def _backend(
     graph_module: Any,
     example_inputs: list[Any],
     **kwargs: Any,
@@ -64,3 +55,20 @@ def backend(
         return graph_module
 
     return Runner(plan, settings)
+
+
+try:
+    from tensorplay.compiler import BackendCapabilities, declares_capabilities
+
+    backend = declares_capabilities(
+        BackendCapabilities(
+            inference_only=True,
+            handles_training=False,
+            optional_deps=("tensorrt",),
+        )
+    )(_backend)
+except ImportError:
+    # A core without the capability contract cannot read the declaration;
+    # the backend stays importable and the contract gap surfaces when the
+    # compiler resolves backends by name.
+    backend = _backend
