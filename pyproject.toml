@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tensorplay-tensorrt"
+version = "0.1.0"
+description = "TensorRT compiler backend for TensorPlay"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "TensorPlay contributors" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy",
+    "tensorplay",
+]
+
+[project.optional-dependencies]
+# The backend drives NVIDIA TensorRT through its Python API; the package is
+# large and GPU-bound, so it stays an extra rather than a hard dependency.
+tensorrt = ["tensorrt>=10"]
+dev = ["pytest"]
+
+[project.entry-points."tensorplay_compiler_backends"]
+tensorrt = "tensorplay_tensorrt.backend:backend"
+
+[tool.setuptools.packages.find]
+include = ["tensorplay_tensorrt*"]
