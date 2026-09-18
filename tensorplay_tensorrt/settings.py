@@ -44,8 +44,12 @@ class CompilationSettings:
         rejected so a typo never silently changes nothing.
         """
 
-        options_keys = {"precision", "workspace_bytes", "cache_dir",
-                        "pass_through_build_failures"}
+        options_keys = {
+            "precision",
+            "workspace_bytes",
+            "cache_dir",
+            "pass_through_build_failures",
+        }
         known = options_keys | {"options"}
         unknown = (set(kwargs) - known) | (
             set(kwargs.get("options") or ()) - options_keys
@@ -60,9 +64,7 @@ class CompilationSettings:
             in_options = name in options
             in_kwargs = name in kwargs
             if in_options and in_kwargs:
-                raise TypeError(
-                    f"tensorrt backend option {name!r} given twice"
-                )
+                raise TypeError(f"tensorrt backend option {name!r} given twice")
             if in_options:
                 payload[name] = options.pop(name)
             elif in_kwargs:

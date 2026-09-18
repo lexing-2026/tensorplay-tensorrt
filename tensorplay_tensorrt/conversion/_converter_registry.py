@@ -28,7 +28,9 @@ class UnsupportedOperator(Exception):
 CONVERTERS: dict[str, Callable[..., Any]] = {}
 
 
-def register_converter(*names: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def register_converter(
+    *names: str,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Bind one converter to one or more op names."""
 
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:

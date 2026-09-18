@@ -30,3 +30,6 @@ tensorrt = "tensorplay_tensorrt.backend:backend"
 
 [tool.setuptools.packages.find]
 include = ["tensorplay_tensorrt*"]
+
+[dependency-groups]
+lint = ["black>=24.0.0"]

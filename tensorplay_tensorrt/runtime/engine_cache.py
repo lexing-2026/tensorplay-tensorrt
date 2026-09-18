@@ -28,9 +28,7 @@ def _graph_key(graph_module: Any, example_inputs: list[Any], settings: Any) -> s
     digest = hashlib.sha256()
     digest.update(str(graph_module.graph).encode())
     for sample in example_inputs:
-        digest.update(
-            f"|{tuple(int(d) for d in sample.shape)}:{sample.dtype}".encode()
-        )
+        digest.update(f"|{tuple(int(d) for d in sample.shape)}:{sample.dtype}".encode())
     digest.update(f"|precision={settings.precision}".encode())
     digest.update(f"|workspace={settings.workspace_bytes}".encode())
     digest.update(f"|trt={trt.__version__}".encode())
@@ -126,9 +124,7 @@ def build_engine(
     Interpreter(network, list(example_inputs), settings, trt).run(graph_module)
 
     key = _graph_key(graph_module, example_inputs, settings)
-    blob = _load_or_build(
-        settings, key, lambda: _engine_bytes(network, settings, trt)
-    )
+    blob = _load_or_build(settings, key, lambda: _engine_bytes(network, settings, trt))
 
     runtime = trt.Runtime(logger)
     engine = runtime.deserialize_cuda_engine(blob)
@@ -137,11 +133,11 @@ def build_engine(
 
     names = [engine.get_tensor_name(index) for index in range(engine.num_io_tensors)]
     input_names = [
-        name for name in names
-        if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT
+        name for name in names if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT
     ]
     output_names = [
-        name for name in names
+        name
+        for name in names
         if engine.get_tensor_mode(name) == trt.TensorIOMode.OUTPUT
     ]
     io_dtypes = {
