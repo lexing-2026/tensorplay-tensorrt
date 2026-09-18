@@ -89,6 +89,12 @@ jobs:
           fi
           gh release upload "$GITHUB_REF_NAME" dist/* \
             --repo "$GITHUB_REPOSITORY" --clobber
+          # A release created under Actions can land as a draft. A draft is
+          # invisible to consumers and its assets do not read back through
+          # the release API, so publish it before anything consumes it.
+          gh release edit "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false
       - name: Install from the GitHub release and exercise the suite
         run: |
           # Consume the release the way a user does: a fresh environment that
