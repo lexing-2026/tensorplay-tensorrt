@@ -92,11 +92,14 @@ jobs:
       - name: Install from the GitHub release and exercise the suite
         run: |
           # Consume the release the way a user does: a fresh environment that
-          # installs the published wheel straight off the release URL.
+          # installs the published wheel straight off the release URL. The
+          # wheel URL is filtered shell-side; select() over endswith() hits
+          # an empty match under the GitHub CLI's built-in jq evaluator.
           wheel_url="$(gh release view "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --json assets \
-            --jq '.assets[] | select(.name | endswith(".whl")) | .browser_download_url')"
+            --jq '.assets[].browser_download_url' \
+            | grep '\.whl$' | head -1)"
           echo "release wheel: $wheel_url"
           python -m venv consumer
           consumer/bin/pip install --disable-pip-version-check --quiet \
