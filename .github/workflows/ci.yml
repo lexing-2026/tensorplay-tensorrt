@@ -1,0 +1,35 @@
+name: ci
+
+# Structure tests on every push and pull request: entry-point registration,
+# capability declaration, settings parsing, and the missing-dependency error
+# path. The suite's numeric and engine legs need a GPU plus the tensorrt
+# package and skip themselves on hosted runners.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions: read-all
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.13"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          show-progress: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --disable-pip-version-check --upgrade pip
+          python -m pip install --disable-pip-version-check -e .[dev]
+      - name: Run tests
+        run: python -m pytest tests/ -q

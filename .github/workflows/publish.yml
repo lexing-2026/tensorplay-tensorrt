@@ -1,0 +1,79 @@
+name: publish
+
+# Release publisher: on a v* tag, build the sdist and the pure-Python wheel,
+# validate the metadata, smoke-test the built wheel in an isolated
+# environment, then publish through PyPI trusted publishing and attach the
+# artifacts to a GitHub release as a download mirror. A workflow_dispatch
+# without a tag runs the build and smoke test only -- releases go out on tag
+# pushes, and PyPI rejects a second upload of the same version, so there is
+# deliberately no same-version repair path.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          show-progress: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --disable-pip-version-check --upgrade pip
+          python -m pip install --disable-pip-version-check build twine
+          python -m build
+          twine check dist/*
+      - name: Smoke-test the built wheel
+        run: |
+          # A fresh interpreter with only the wheel installed: the structure
+          # suite must pass against the artifact, not the source tree. The
+          # console-script pytest avoids the ``python -m`` cwd insertion that
+          # would shadow the wheel with this checkout's package directory.
+          python -m venv smoke
+          smoke/bin/pip install --disable-pip-version-check --quiet dist/*.whl pytest
+          smoke/bin/pytest tests/ -q
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build-and-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: pypi
+      url: https://pypi.org/p/tensorplay-tensorrt
+    permissions:
+      id-token: write
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
+      - name: Attach artifacts to the release
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "tensorplay-tensorrt $GITHUB_REF_NAME" \
+              --generate-notes
+          fi
+          gh release upload "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
