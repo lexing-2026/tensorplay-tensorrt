@@ -95,11 +95,23 @@ jobs:
           # installs the published wheel straight off the release URL. The
           # wheel URL is filtered shell-side; select() over endswith() hits
           # an empty match under the GitHub CLI's built-in jq evaluator.
-          wheel_url="$(gh release view "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json assets \
-            --jq '.assets[].browser_download_url' \
-            | grep '\.whl$' | head -1)"
+          # A --clobber re-upload leaves a short window where the assets
+          # list is empty, so poll until the wheel is visible.
+          wheel_url=""
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            wheel_url="$(gh release view "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets \
+              --jq '.assets[].browser_download_url' \
+              | grep '\.whl$' | head -1 || true)"
+            [[ -n "$wheel_url" ]] && break
+            echo "release wheel not visible yet (attempt $attempt); retrying"
+            sleep 5
+          done
+          if [[ -z "$wheel_url" ]]; then
+            echo "::error::release wheel never became visible"
+            exit 1
+          fi
           echo "release wheel: $wheel_url"
           python -m venv consumer
           consumer/bin/pip install --disable-pip-version-check --quiet \
