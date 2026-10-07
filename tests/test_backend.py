@@ -41,11 +41,9 @@ def test_backend_registered_through_entry_point():
     assert "tensorrt" in list_backends(include_unavailable=True)
 
 
-def test_capabilities_declare_inference_only_and_dep():
+def test_capabilities_declare_optional_dep():
     caps = get_backend_capabilities("tensorrt")
     assert caps is not None
-    assert caps.inference_only is True
-    assert caps.handles_training is False
     assert "tensorrt" in caps.optional_deps
 
 

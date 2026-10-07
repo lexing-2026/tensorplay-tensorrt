@@ -60,10 +60,11 @@ def _backend(
 try:
     from tensorplay.compiler import BackendCapabilities, declares_capabilities
 
+    # Training regions never reach a backend directly: the frontend routes
+    # them through ahead-of-time autograd before lookup, so no training
+    # capability needs declaring.
     backend = declares_capabilities(
         BackendCapabilities(
-            inference_only=True,
-            handles_training=False,
             optional_deps=("tensorrt",),
         )
     )(_backend)
