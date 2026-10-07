@@ -23,9 +23,16 @@ __all__ = ["EnginePlan", "build_engine"]
 log = logging.getLogger(__name__)
 
 
+# Bump when converter lowering changes so engines built by an older
+# conversion surface are never replayed against a graph they were not
+# lowered for.
+CONVERTERS_ABI = "2"
+
+
 def _graph_key(graph_module: Any, example_inputs: list[Any], settings: Any) -> str:
     trt = _trt()
     digest = hashlib.sha256()
+    digest.update(f"converters_abi={CONVERTERS_ABI}".encode())
     digest.update(str(graph_module.graph).encode())
     for sample in example_inputs:
         digest.update(f"|{tuple(int(d) for d in sample.shape)}:{sample.dtype}".encode())
@@ -45,9 +52,11 @@ def _engine_bytes(network: Any, settings: Any, trt: Any) -> bytes:
             trt.MemoryPoolType.WORKSPACE, int(settings.workspace_bytes)
         )
     if settings.precision == "fp16":
-        if not builder.platform_has_fast_fp16:
+        platform_fast = getattr(builder, "platform_has_fast_fp16", None)
+        if platform_fast is not None and not platform_fast:
             log.warning("fp16 requested but the platform has no fast fp16 path")
-        config.set_flag(trt.BuilderFlag.FP16)
+        # The network already computes in HALF (inputs are cast in the
+        # interpreter); newer TensorRT has no fp16 builder flag to set.
 
     # Static shapes in this release: one profile pinned to the sample shapes.
     profile = builder.create_optimization_profile()

@@ -15,10 +15,17 @@ from ._conversion_context import ConversionContext
 
 __all__ = [
     "UnsupportedOperand",
+    "axes_mask",
     "broadcast",
+    "cast_tensor",
     "create_constant",
     "get_trt_tensor",
+    "positive_dims",
     "prepend_ones",
+    "reshape_static",
+    "shuffle_permute",
+    "static_shape",
+    "squeeze_dims",
     "trt_dtype",
 ]
 
@@ -41,11 +48,17 @@ _DTYPE_NAME_TO_TRT = {
 
 _NUMPY_DTYPES = {
     "bool": "bool_",
+    "BOOL": "bool_",
     "int8": "int8",
+    "INT8": "int8",
     "int32": "int32",
+    "INT32": "int32",
     "int64": "int64",
+    "INT64": "int64",
     "float16": "float16",
+    "HALF": "float16",
     "float32": "float32",
+    "FLOAT": "float32",
 }
 
 
@@ -162,3 +175,102 @@ def broadcast(
     elif diff < 0:
         a = prepend_ones(ctx, a, f"{a_name}_broadcast", -diff)
     return a, b
+
+
+def static_shape(tensor: Any) -> tuple[int, ...]:
+    """The tensor's shape when every dimension is known at build time."""
+
+    shape = tuple(int(dim) for dim in tensor.shape)
+    for dim in shape:
+        if dim < 0:
+            raise UnsupportedOperand(
+                f"operation needs static shapes, got {shape}"
+            )
+    return shape
+
+
+def positive_dims(dims: Any, rank: int) -> list[int]:
+    """Wrap negative dimension indices into ``[0, rank)``."""
+
+    if isinstance(dims, (int, bool)):
+        dims = [int(dims)]
+    result = []
+    for dim in dims:
+        dim = int(dim)
+        if dim < 0:
+            dim += rank
+        if not 0 <= dim < rank:
+            raise UnsupportedOperand(f"dimension {dim} out of range for rank {rank}")
+        result.append(dim)
+    return result
+
+
+def axes_mask(dims: Any) -> int:
+    """Bitmask TensorRT reduce/softmax layers expect for a set of axes."""
+
+    mask = 0
+    for dim in dims:
+        mask |= 1 << int(dim)
+    return mask
+
+
+def reshape_static(
+    ctx: ConversionContext,
+    tensor: Any,
+    name: str,
+    dims: tuple[int, ...],
+) -> Any:
+    """Reshape through a shuffle layer with build-time-known dimensions."""
+
+    layer = ctx.net.add_shuffle(tensor)
+    layer.reshape_dims = tuple(int(dim) for dim in dims)
+    layer.name = name
+    return layer.get_output(0)
+
+
+def shuffle_permute(
+    ctx: ConversionContext,
+    tensor: Any,
+    name: str,
+    permutation: tuple[int, ...],
+) -> Any:
+    """Transpose through a shuffle layer's dedicated permutation input."""
+
+    layer = ctx.net.add_shuffle(tensor)
+    layer.second_transpose = tuple(int(dim) for dim in permutation)
+    layer.name = name
+    return layer.get_output(0)
+
+
+def squeeze_dims(
+    ctx: ConversionContext,
+    tensor: Any,
+    name: str,
+    dims: Any,
+) -> Any:
+    """Drop size-1 dimensions listed in ``dims`` (build-time shapes only)."""
+
+    shape = static_shape(tensor)
+    drop = set(positive_dims(dims, len(shape)))
+    for dim in drop:
+        if shape[dim] != 1:
+            raise UnsupportedOperand(
+                f"cannot squeeze dimension {dim} of size {shape[dim]}"
+            )
+    kept = [size for index, size in enumerate(shape) if index not in drop]
+    if not kept:
+        kept = [1]
+    return reshape_static(ctx, tensor, name, tuple(kept))
+
+
+def cast_tensor(
+    ctx: ConversionContext,
+    tensor: Any,
+    name: str,
+    dtype: Any,
+) -> Any:
+    """Element-type change through a cast layer."""
+
+    layer = ctx.net.add_cast(tensor, trt_dtype(ctx.trt, dtype))
+    layer.name = name
+    return layer.get_output(0)

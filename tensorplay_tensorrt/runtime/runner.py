@@ -63,6 +63,9 @@ class Runner:
         staged: list[Any] = []
         for name, value in zip(plan.input_names, args):
             tensor = self._prepare_input(value)
+            target_dtype = plan.io_dtypes[name]
+            if getattr(tensor, "dtype", None) != target_dtype:
+                tensor = tensor.to(target_dtype)
             staged.append(tensor)
             context.set_tensor_address(name, tensor.data_ptr())
 

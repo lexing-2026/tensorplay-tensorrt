@@ -57,6 +57,21 @@ _OPERATOR_TARGETS = {
 }
 
 
+def _bare_op_name(name: str) -> str:
+    """Strip namespace and overload decoration from a qualified op name.
+
+    Op overloads report ``namespace::op.overload``; the converter table is
+    keyed on the bare operation name so a functional call and its op-overload
+    form share one converter.
+    """
+
+    if "::" in name:
+        name = name.split("::", 1)[1]
+    if "." in name:
+        name = name.split(".", 1)[0]
+    return name
+
+
 def target_name(node: Any) -> str:
     """Bare op name for a captured call node, or ``""`` when unknown."""
 
@@ -65,4 +80,11 @@ def target_name(node: Any) -> str:
     target = node.target
     if target in _OPERATOR_TARGETS:
         return _OPERATOR_TARGETS[target]
-    return getattr(target, "__name__", "")
+    # Op-overload targets expose the qualified name through ``name()``; the
+    # ``namespace`` attribute separates them from plain callables, whose
+    # ``__name__`` already is the bare op name.
+    if getattr(target, "namespace", None) is not None:
+        name_attr = getattr(target, "name", None)
+        if callable(name_attr):
+            return _bare_op_name(str(name_attr()))
+    return _bare_op_name(getattr(target, "__name__", ""))

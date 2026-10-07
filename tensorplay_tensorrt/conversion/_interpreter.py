@@ -14,7 +14,7 @@ from typing import Any
 
 from ._converter_registry import CONVERTERS, UnsupportedOperator, target_name
 from ._conversion_context import ConversionContext
-from .converter_utils import trt_dtype
+from .converter_utils import cast_tensor, trt_dtype
 
 
 class Interpreter:
@@ -57,9 +57,17 @@ class Interpreter:
         sample = self.example_inputs[self._input_index]
         self._input_index += 1
         shape = tuple(int(dim) for dim in sample.shape)
-        return self.ctx.net.add_input(
+        tensor = self.ctx.net.add_input(
             node.name, trt_dtype(self.ctx.trt, sample.dtype), shape
         )
+        # fp16 lowers the arithmetic to half precision; the builder flag no
+        # longer exists, so the network computes in HALF from the input cast.
+        if (
+            self.ctx.settings.precision == "fp16"
+            and str(sample.dtype).rsplit(".", 1)[-1] in ("float32", "float64")
+        ):
+            tensor = cast_tensor(self.ctx, tensor, f"{node.name}_fp16", "float16")
+        return tensor
 
     def _fetch(self, value: Any) -> Any:
         """Evaluate one node argument: a produced value or a literal.
@@ -93,14 +101,32 @@ class Interpreter:
         return converter(self.ctx, node.target, args, kwargs, node.name)
 
     def _output(self, node: Any, graph_module: Any) -> Any:
+        def _finalize(key: str, tensor: Any) -> Any:
+            # In fp16 mode the network computed in HALF; hand the caller the
+            # float precision the region's eager execution would have used.
+            if (
+                self.ctx.settings.precision == "fp16"
+                and getattr(tensor, "dtype", None) == self.ctx.trt.DataType.HALF
+            ):
+                tensor = cast_tensor(
+                    self.ctx, tensor,
+                    self.ctx.unique(f"{key}_fp32"), "float32",
+                )
+            self.ctx.net.mark_output(tensor)
+            return tensor
+
         values = node.args[0]
         if isinstance(values, (list, tuple)):
-            if len(values) != 1:
-                raise ValueError("multi-output regions are not supported yet")
-            values = values[0]
+            tensors = []
+            for value in values:
+                key = getattr(value, "name", None)
+                if key not in self.env:
+                    raise ValueError(f"output {key!r} was never produced")
+                tensors.append(_finalize(key, self.env[key]))
+            if len(tensors) == 1:
+                return tensors[0]
+            return tuple(tensors)
         key = getattr(values, "name", None)
         if key not in self.env:
             raise ValueError(f"output {key!r} was never produced")
-        tensor = self.env[key]
-        self.ctx.net.mark_output(tensor)
-        return tensor
+        return _finalize(key, self.env[key])
